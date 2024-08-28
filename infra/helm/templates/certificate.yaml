@@ -1,0 +1,13 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: {{ .Values.sslcert.name }}
+  annotations:
+    {{- range $key, $value := .Values.sslcert.annotations }}
+    {{ $key }}: "{{ $value }}"
+    {{- end }}
+spec:
+  domains:
+    - "{{ .Values.sslcert.host }}"
+{{- end }}

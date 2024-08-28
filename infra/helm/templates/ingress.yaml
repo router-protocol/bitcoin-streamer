@@ -1,0 +1,26 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.app }}-ingress-public
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    networking.gke.io/managed-certificates: {{ .Values.sslcert.name }}
+    kubernetes.io/ingress.global-static-ip-name: {{ .Values.app }}-{{ .Values.env }}-ip
+    {{- range $key, $value := .Values.ingress.annotations }}
+    {{ $key }}: "{{ $value }}"
+    {{- end }}
+
+spec:
+  rules:
+  {{- $root := . }}
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ $root.Values.service.name }}
+            port:
+              number: {{ $root.Values.service.port }}
+{{- end }}

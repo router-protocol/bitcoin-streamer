@@ -1,0 +1,56 @@
+replicaCount: 1
+
+app: bitcoin-streamer
+env: mainnet
+
+image:
+  repository: asia-south1-docker.pkg.dev/router-mainnet-api/router-apps-asia-south/bitcoin-streamer
+  tag: latest
+  pullPolicy: IfNotPresent
+
+container:
+  secretName: bitcoin-streamer-env
+
+service:
+  type: NodePort
+  name: bitcoin-streamer
+  port: 8903
+  targetPort: 8903
+
+sslcert:
+  enabled: true
+  name: "bitcoin-streamer-tls"
+  host: "api.bitcoin-streamer.routerchain.network"
+  annotations:
+    "helm.sh/hook": "post-install,post-upgrade"
+    "helm.sh/hook-weight": "20"
+    "helm.sh/resource-policy": "keep"
+
+autoscaling:
+  enabled: true
+  targetCPUUtilizationPercentage: 80
+  minReplicas: 1
+  maxReplicas: 1
+
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    networking.gke.io/v1: "managed-certificates"
+    "helm.sh/resource-policy": "keep"
+
+backendConfig:
+  healthCheck:
+    requestPath: /
+    checkIntervalSec: 60
+    timeoutSec: 100
+    healthyThreshold: 1
+    unhealthyThreshold: 5
+
+resources:
+  requests:
+    memory: "1024Mi"
+    cpu: "700m"
+  limits:
+    memory: "2048Mi"
+    cpu: "950m"
