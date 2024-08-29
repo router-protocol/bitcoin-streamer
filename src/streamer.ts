@@ -5,7 +5,15 @@ import { updateLastUpdatedBlock, getLastSyncedBlock } from './db/mongoDB/action/
 import logger from './logger';
 import { getNetwork } from "./constant/index";
 import { ChainGrpcMultiChainApi, getEndpointsForNetwork, getNetworkType } from '@routerprotocol/router-chain-sdk-ts';
+import NodeCache from 'node-cache';
+import pLimit from 'p-limit';
 require('dotenv').config();
+
+
+// Initialize the cache
+const cache = new NodeCache({ stdTTL: 300, checkperiod: 320 }); // Cache TTL is 5 minutes
+
+const limit = pLimit(5); // Limit to 5 concurrent requests
 
 const bitcoinClient = new Client({
   network: 'mainnet',
@@ -38,7 +46,7 @@ interface ExtractedBitcoinData {
     OpReturnData: string;
     SourceAmount: bigint;
     DestChainId: string;
-    DepositId: number;
+    DepositId: bigint;
     PartnerId: bigint;
     Recipient: Buffer;
     BlockHeight: number;
@@ -62,9 +70,6 @@ export async function initialize() {
     logger.info(`CHAIN_ID: ${process.env.CHAIN_ID}`);
     const network = getNetwork(process.env.CHAIN_ID);
     logger.info(`Streamer Service Running on : ${network.name}`);
-
-    const blockChainInfo =  await bitcoinClient.getBlockchainInfo()
-    logger.info('Connected to Bitcoin node',blockChainInfo);
 
     const chainStateCollection = await getCollection('chainState');
     const EXPLORER_ENVIRONMENT: string = process.env.EXPLORER_ENVIRONMENT;
@@ -108,12 +113,13 @@ async function processBlock(blockNumber: number) {
   try {
     const blockHash = await bitcoinClient.getBlockHash(blockNumber);
     const block = await bitcoinClient.getBlock(blockHash);
-    await processTransactionsInChunks(block, 1000); 
+    await processTransactionsInChunks(block,100); 
   } catch (error) {
     logger.error(`Error processing block ${blockNumber}: ${error.message}`);
     throw error; // Optionally rethrow or handle the error as needed
   }
 }
+
 
 async function processTransactionsInChunks(block: any, chunkSize: number) {
   const txids = block.tx;
@@ -121,14 +127,52 @@ async function processTransactionsInChunks(block: any, chunkSize: number) {
   logger.info(`Block ${block.height} contains ${totalTxs} transactions`);
 
   for (let i = 0; i < totalTxs; i += chunkSize) {
-    const chunk = txids.slice(i, i + chunkSize);
-    logger.info(`Processing transactions ${i + 1} to ${Math.min(i + chunkSize, totalTxs)} in parallel`);
-    
-    // Process the transactions in parallel
-    await Promise.all(chunk.map(async (txid: string) => {
-      const transaction = await bitcoinClient.getRawTransaction(txid, true);
-      await processTransaction(block,transaction);
-    }));
+      const chunk = txids.slice(i, i + chunkSize);
+      logger.info(`Processing transactions ${i + 1} to ${Math.min(i + chunkSize, totalTxs)}`);
+
+      await Promise.all(chunk.map(txid => limit(() => retryWithBackoff(() => processTransactionWithCache(block, txid), 3))));
+  }
+}
+
+async function processTransactionWithCache(block: any, txid: string) {
+  try {
+      const transaction = await getTransactionWithCache(txid);
+      await processTransaction(block, transaction);
+  } catch (error) {
+      logger.error(`Error processing transaction ${txid}: ${error.message}`);
+  }
+}
+
+async function getTransactionWithCache(txid: string) {
+  const cacheKey = `tx:${txid}`;
+  let transaction = cache.get(cacheKey);
+  
+  if (!transaction) {
+      transaction = await retryWithBackoff(() => bitcoinClient.getRawTransaction(txid, true), 3);
+      cache.set(cacheKey, transaction, 300); // Cache for 5 minutes
+  }
+  
+  return transaction;
+}
+
+async function retryWithBackoff(fn: () => Promise<any>, retries: number) {
+  let attempt = 0;
+  let delay = 1000;
+
+  while (attempt < retries) {
+      try {
+          return await fn();
+      } catch (error) {
+          if (attempt < retries - 1) {
+              logger.warn(`Attempt ${attempt + 1} failed: ${error.message}. Retrying after ${delay}ms.`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              delay *= 2;
+              attempt++;
+          } else {
+              logger.error(`All ${retries} attempts failed: ${error.message}`);
+              throw error;
+          }
+      }
   }
 }
 
@@ -157,34 +201,23 @@ async function processTransaction(block : any, transaction: any) {
                 if (flag === ISendFlag || flag === IReceiveFlag || flag === SetDappMetadataFlag) {
                     
                     logger.info(`Found a valid flag: ${flag}`);
-                    logger.info(`Processing transaction ${transaction.txid}`);
-                    const newProcessedEventNonce = await extractDataFromRPCTransaction(transaction,block,actualData);
-
+                    await extractDataFromRPCTransaction(transaction,block,actualData);
                 }
             }
         }
-
-        // // Here, you would call a function similar to `extractDataFromRPCTransaction`
-        // const newProcessedEventNonce = await extractDataFromRPCTransaction(transaction, actualData);
-
-        // // Update the last processed nonce if needed
-        // if (newProcessedEventNonce > lastProcessedEventNonce) {
-        //     lastProcessedEventNonce = newProcessedEventNonce;
-        // }
 
     } catch (error) {
         logger.error(`Error processing transaction ${transaction.txid}: ${error.message}`);
     }
 }
 
-async function extractDataFromRPCTransaction(tx: any, block: any, actualData: Buffer): Promise<number> {
-  debugger
+async function extractDataFromRPCTransaction(tx: any, block: any, actualData: Buffer){
   const extractedData: ExtractedBitcoinData = {
     TxHash: tx.txid,
     OpReturnData: actualData.toString('hex'), // Assuming this is the data from OP_RETURN
     SourceAmount: BigInt(0),
     DestChainId: '',
-    DepositId: 0,
+    DepositId: BigInt(0),
     PartnerId: BigInt(0),
     Recipient: Buffer.alloc(0),
     BlockHeight: block.height,
@@ -204,12 +237,13 @@ async function extractDataFromRPCTransaction(tx: any, block: any, actualData: Bu
   const txIndex = block.tx.findIndex((txID: string) => txID === tx.txid);
   if (txIndex === -1) throw new Error(`Transaction ${tx.txid} not found in block`);
 
-  extractedData.DepositId = (extractedData.BlockHeight << 32) | txIndex;
+  // Use BigInt for large integer operations
+  const blockHeightBigInt = BigInt(extractedData.BlockHeight);
+  extractedData.DepositId = (blockHeightBigInt << BigInt(32)) | BigInt(txIndex);
+ // extractedData.DepositId = (extractedData.BlockHeight << 32) || txIndex;
 
   const gasBurnt = await fetchTransactionFee(tx);
   extractedData.GasBurnt = gasBurnt;
-
-  logger.info(`Current Processing Event Nonce: ${extractedData.DepositId}`);
 
   let depositorAddress = '';
 
@@ -246,13 +280,19 @@ async function extractDataFromRPCTransaction(tx: any, block: any, actualData: Bu
 
   switch (flag) {
     case ISendFlag:
-      return await processISendEvent(tx, extractedData, eventData, depositorAddress, gatewayAddress);
-
+      
+      await processISendEvent(tx, extractedData, eventData, depositorAddress, gatewayAddress);
+      break
+      
     case IReceiveFlag:
-      return await processIReceiveEvent(tx, extractedData, eventData, gatewayAddress);
+      
+      await processIReceiveEvent(tx, extractedData, eventData, gatewayAddress);
+      break
 
     case SetDappMetadataFlag:
-      return await processSetDappMetadataEvent(tx, extractedData, eventData, depositorAddress);
+        
+      await processSetDappMetadataEvent(tx, extractedData, eventData, depositorAddress);
+      break
 
     default:
       throw new Error(`Unknown event: ${flag}`);
@@ -268,9 +308,7 @@ async function processISendEvent(
     eventData: Buffer,
     depositorAddress: string,
     gatewayAddress: string
-  ): Promise<number> {
-    debugger
-    logger.info("Extracting ISendEvent Data");
+  ) {
   
     if (depositorAddress === gatewayAddress) {
       throw new Error(`The Depositor Address is same as Gateway address: ${depositorAddress}`);
@@ -282,7 +320,6 @@ async function processISendEvent(
     logger.info(`Starting to process Vout for transaction: ${tx.txid}`);
     for (const [i, output] of tx.vout.entries()) {
       logger.info(`Processing output ${i}: Value=${output.value}, ScriptPubKey=${JSON.stringify(output.scriptPubKey)}`);
-  
       let address: string | undefined;
       if (output.scriptPubKey.addresses && output.scriptPubKey.addresses.length > 0) {
         address = output.scriptPubKey.addresses[0];
@@ -322,9 +359,7 @@ async function processISendEvent(
     const [sourceAmount, destChainId, partnerId, recipient, err] = await decodeISendEventMemo(eventData);
     if (err) {
         throw new Error(`Error decoding ISend event: ${err}`);
-      }
-  
-    logger.info(`Decoded data from ISend Event: ${sourceAmount} || ${destChainId} || ${partnerId} || ${recipient}`);
+    }
   
     if (totalReceived >= BigInt(sourceAmount)) {
       extractedData.SourceAmount = totalReceived;
@@ -337,7 +372,7 @@ async function processISendEvent(
     extractedData.Recipient = recipient;
     extractedData.Depositor = depositorAddress;
   
-    logger.info("EXTRACTED DATA FROM ISEND EVENT:", extractedData);
+    prettyLogExtractedData("ISEND", extractedData);
   
     try {
       await saveExtractedDataToDatabase(extractedData);
@@ -346,55 +381,56 @@ async function processISendEvent(
       throw err;
     }
   
-    return extractedData.DepositId;
 }
 
 function decodeISendEventMemo(data: Buffer): [bigint, string, bigint, Buffer, Error | null] {
-  debugger
-    const reader = new DataView(data.buffer);
-  
-    let offset = 0;
-  
-    // Read nonEvmFlag
-    const nonEvmFlag = reader.getUint8(offset);
-    offset += 1;
-  
-    // Read sourceAmount
-    const sourceAmount = reader.getBigUint64(offset, false); // false for Big Endian
-    offset += 8;
-  
-    // Read partnerId
-    const partnerId = reader.getBigUint64(offset, false); // false for Big Endian
-    offset += 8;
-  
-    let destChainId: string;
-    let recipientSize: number;
-    let recipientBytes: Buffer;
-  
-    switch (nonEvmFlag) {
-      case 0x01:
-        destChainId = "osmo-test-5";
-        recipientSize = data.length - offset; // Remaining size
-        break;
-      case 0x02:
-        destChainId = "near-testnet";
-        recipientSize = data.length - offset; // Remaining size
-        break;
-      default:
-        const destChainIdBytes = Buffer.alloc(evmDestChainIdSize);
-        data.copy(destChainIdBytes, 0, offset, offset + evmDestChainIdSize);
-        destChainId = destChainIdBytes.toString('utf8').replace(/\0/g, '');
-        offset += evmDestChainIdSize;
-        recipientSize = recipientSizeEVM;
-        break;
-    }
-  
-    // Read recipientBytes
-    recipientBytes = Buffer.alloc(recipientSize);
-    data.copy(recipientBytes, 0, offset, offset + recipientSize);
-  
-    return [sourceAmount, destChainId, partnerId, recipientBytes, null];
+  try {
+
+      let offset = 0;
+
+      // Read nonEvmFlag
+      const nonEvmFlag = data.readUInt8(offset);
+      offset += 1;
+
+      // Read sourceAmount
+      const sourceAmount = data.readBigUInt64BE(offset); // Big-endian
+      offset += 8;
+
+      // Read partnerId
+      const partnerId = data.readBigUInt64BE(offset); // Big-endian
+      offset += 8;
+
+      let destChainId: string;
+      let recipientSize: number;
+      let recipientBytes: Buffer;
+
+      switch (nonEvmFlag) {
+          case 0x01:
+              destChainId = "osmo-test-5";
+              recipientSize = data.length - offset; // Remaining size
+              break;
+          case 0x02:
+              destChainId = "near-testnet";
+              recipientSize = data.length - offset; // Remaining size
+              break;
+          default:
+              const destChainIdBytes = data.slice(offset, offset + evmDestChainIdSize);
+              destChainId = destChainIdBytes.toString('utf8').replace(/\0/g, ''); // Trim null bytes
+              offset += evmDestChainIdSize;
+              recipientSize = recipientSizeEVM;
+              break;
+      }
+
+      // Read recipientBytes
+      recipientBytes = data.slice(offset, offset + recipientSize);
+
+      return [sourceAmount, destChainId, partnerId, recipientBytes, null];
+  } catch (error) {
+      console.error("Error decoding ISend event:", error);
+      return [BigInt(0), "", BigInt(0), Buffer.alloc(0), error];
+  }
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////// IRECEIVE EVENT /////////////////////////////////////////////////
@@ -404,7 +440,7 @@ async function processIReceiveEvent(
     extractedData: ExtractedBitcoinData,
     eventData: Buffer,
     btcGatewayAddress: string
-  ): Promise<number> {
+  ){
     logger.info("\nExtracting IReceiveFlag Data\n");
   
     let totalSent = BigInt(0);
@@ -432,7 +468,7 @@ async function processIReceiveEvent(
     extractedData.RequestIdentifier = requestIdentifier;
     extractedData.Gateway = btcGatewayAddress;
   
-    logger.info("\nEXTRACTED DATA FROM IRECEIVE EVENT:\n", extractedData);
+    prettyLogExtractedData("IRECEIVE", extractedData);
   
     try {
       await saveExtractedDataToDatabase(extractedData);
@@ -441,27 +477,34 @@ async function processIReceiveEvent(
       throw err;
     }
   
-    return extractedData.DepositId;
   }
   
-function decodeIReceiveEventMemo(data: Buffer): [bigint, bigint,string, Error | null] {
-  
+function decodeIReceiveEventMemo(data: Buffer): [bigint, bigint, string, Error | null] {
+  try {
+
     if (data.length < destAmountSize + depositIDSize + srcChainIDSize) {
-      return [BigInt(0), BigInt(0),'',new Error("Data is too short")];
+      return [BigInt(0), BigInt(0), '', new Error("Data is too short")];
     }
-  
+
     let offset = 0;
-  
+
+    // Read amount
     const amount = data.readBigUInt64BE(offset);
     offset += destAmountSize;
-  
+
+    // Read depositID
     const depositID = data.readBigUInt64BE(offset);
     offset += depositIDSize;
-  
+
+    // Read srcChainID
     const srcChainIDBytes = data.slice(offset, offset + srcChainIDSize);
-    const srcChainID = srcChainIDBytes.toString('utf8').replace(/\0/g, '');
-  
-    return [amount, depositID, srcChainID,null];
+    const srcChainID = srcChainIDBytes.toString('utf8').replace(/\0/g, ''); // Trim null bytes
+
+    return [amount, depositID, srcChainID, null];
+  } catch (error) {
+    console.error("Error decoding IReceive event:", error);
+    return [BigInt(0), BigInt(0), '', error];
+  }
 }
   
 
@@ -469,44 +512,47 @@ function decodeIReceiveEventMemo(data: Buffer): [bigint, bigint,string, Error | 
 ////////////////////////// SET DAPP METADATA EVENT ////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////
 async function processSetDappMetadataEvent(tx: any, extractedData: ExtractedBitcoinData, eventData: Buffer, depositorAddress: string) {
-    logger.info("Extracting SetDappMetadataFlag Data");
+  logger.info("Extracting SetDappMetadataFlag Data");
 
-    if (depositorAddress !== gatewayAddress) {
-        return Promise.reject(new Error(`The Depositor Address (${depositorAddress}) is not the same as Gateway address (${gatewayAddress})`));
-    }
+  if (depositorAddress !== gatewayAddress) {
+      return Promise.reject(new Error(`The Depositor Address (${depositorAddress}) is not the same as Gateway address (${gatewayAddress})`));
+  }
 
-    let isSelfTransfer = true;
-    for (const output of tx.vout) {
-        for (const address of output.scriptPubKey.addresses) {
-            if (address !== gatewayAddress) {
-                isSelfTransfer = false;
-                break;
-            }
-        }
-        if (!isSelfTransfer) break;
-    }
+  let isSelfTransfer = true;
+  for (const output of tx.vout) {
+      const addresses = output.scriptPubKey.addresses || (output.scriptPubKey.address ? [output.scriptPubKey.address] : []);
+      
+      for (const address of addresses) {
+          if (address !== gatewayAddress) {
+              isSelfTransfer = false;
+              break;
+          }
+      }
+      
+      if (!isSelfTransfer) break;
+  }
 
-    if (!isSelfTransfer) {
-        return Promise.reject(new Error("SetDappMetadataFlag transaction is not a self-transfer"));
-    }
+  if (!isSelfTransfer) {
+      return Promise.reject(new Error("SetDappMetadataFlag transaction is not a self-transfer"));
+  }
 
-    const feePayer = decodeSetDappMetaDataMemo(eventData);
-    if (!feePayer) {
-        return Promise.reject(new Error("Error decoding SetDappMetadata event"));
-    }
+  const feePayer = decodeSetDappMetaDataMemo(eventData);
+  if (!feePayer) {
+      return Promise.reject(new Error("Error decoding SetDappMetadata event"));
+  }
 
-    const feePayerAddress = "0x" + feePayer.toString('hex');
-    logger.info(`Decoded data from SetDappMetadata Event: ${feePayerAddress}`);
+  const feePayerAddress = "0x" + feePayer.toString('hex');
+  logger.info(`Decoded data from SetDappMetadata Event: ${feePayerAddress}`);
 
-    extractedData.FeePayerAddress = feePayerAddress;
+  extractedData.FeePayerAddress = feePayerAddress;
 
-    logger.info("EXTRACTED DATA FROM SET DAPP METADATA EVENT:", extractedData);
+  prettyLogExtractedData("SET DAPP METADATA", extractedData);
 
-    try {
-        await saveExtractedDataToDatabase(extractedData);
-    } catch (err) {
-        logger.error("Failed to TransformGatewaySetDappMetadataEvents transaction:", tx, err);
-    }
+  try {
+      await saveExtractedDataToDatabase(extractedData);
+  } catch (err) {
+      logger.error("Failed to save SetDappMetadata event to database:", tx, err);
+  }
 }
 
 
@@ -523,7 +569,6 @@ function decodeSetDappMetaDataMemo(data: Buffer): Buffer | null {
 
 
 async function fetchTransactionFee(tx: any,): Promise<bigint> {
-    debugger
     let totalInputValue = BigInt(0);
     let totalOutputValue = BigInt(0);
   
@@ -579,4 +624,30 @@ export async function startStreamerService() {
   }
 }
 
+function prettyLogExtractedData(eventType: string, extractedData: ExtractedBitcoinData) {
   
+  const prettyData = {
+    "Event Type": eventType,
+    "Block Height": extractedData.BlockHeight,
+    "Block Timestamp": new Date(extractedData.BlockTimestamp * 1000).toISOString(),
+    "Deposit ID": extractedData.DepositId.toString(),
+    "Depositor Address": extractedData.Depositor,
+    "Destination Amount": extractedData.DestAmount.toString(),
+    "Destination Chain ID": extractedData.DestChainId,
+    "Fee Payer Address": extractedData.FeePayerAddress,
+    "Gas Burnt": extractedData.GasBurnt.toString(),
+    "Gateway Address": extractedData.Gateway,
+    "OpReturn Data": extractedData.OpReturnData,
+    "Partner ID": extractedData.PartnerId.toString(),
+    "Recipient": extractedData.Recipient.toString('hex'),
+    "Request Identifier": extractedData.RequestIdentifier.toString(),
+    "Source Amount": extractedData.SourceAmount.toString(),
+    "Source Chain ID": extractedData.SrcChainId,
+    "Transaction Hash": extractedData.TxHash,
+    "Log Timestamp": new Date().toISOString(),
+  };
+
+  // Use logger to log the formatted data
+  logger.info(`EXTRACTED DATA FROM ${eventType} EVENT:\n${JSON.stringify(prettyData, null, 2)}`);
+  
+}
