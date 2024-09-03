@@ -1,4 +1,5 @@
 import { Collection } from 'mongodb';
+import { PRUNE_AFTER } from '../../../constant';
 
 export async function putNewBlocklog(collection: Collection, blocklog: { height: number, blockDump: any }): Promise<void> {
     try {
@@ -46,4 +47,8 @@ export async function getLogsFromBlockHeightToBlockHeight(collection: Collection
         console.error('Error fetching block logs within block height range:', error);
         return [];
     }
+}
+
+export async function createTTLIndex(collection: Collection<Document>): Promise<void> {
+    await collection.createIndex({ "createdAt": 1 }, { expireAfterSeconds: PRUNE_AFTER });
 }

@@ -1,5 +1,6 @@
-import { MongoClient, Db, Collection, Document } from 'mongodb';
+import { MongoClient, Db, Collection, Document as MongoDocument } from 'mongodb';
 import logger from '../../logger'; // Update the import path according to your project structure
+import { createTTLIndex } from './action/backLog';
 
 const dbName = 'bitcoin-streamer';
 let mongoClient: MongoClient;
@@ -31,13 +32,16 @@ export async function closeMongoDBConnection(): Promise<void> {
         DBInstance = null;
     }
 }
-export function getDb(): Db {
+
+export function getDb(collectionName): Db {
     if (!DBInstance) {
         throw new Error('MongoClient is not initialized. Call initializeMongoDB first.');
     }
+    const collection = DBInstance.collection(collectionName) as unknown as Collection<Document>;
+    createTTLIndex(collection);
     return DBInstance;
 }
 
 export function getCollection(collectionName: string): Collection {
-    return getDb().collection(collectionName);
+    return getDb(collectionName).collection(collectionName);
 }
