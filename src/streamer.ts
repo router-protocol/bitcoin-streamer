@@ -13,7 +13,7 @@ require('dotenv').config();
 // Initialize the cache
 const cache = new NodeCache({ stdTTL: 300, checkperiod: 320 }); // Cache TTL is 5 minutes
 
-const limit = pLimit(5); // Limit to 5 concurrent requests
+const limit = pLimit(20); // Limit to 5 concurrent requests
 
 const bitcoinClient = new Client({
   network: 'mainnet',
@@ -42,13 +42,14 @@ const	evmDestChainIdSize  = 32
 
 
 interface ExtractedBitcoinData {
+    EventType: string;
     TxHash: string;
     OpReturnData: string;
     SourceAmount: bigint;
     DestChainId: string;
     DepositId: bigint;
     PartnerId: bigint;
-    Recipient: Buffer;
+    Recipient: string;
     BlockHeight: number;
     BlockTimestamp: number;
     SrcChainId: string;
@@ -92,9 +93,9 @@ export async function initialize() {
         const latestBlockNumber = await bitcoinClient.getBlockCount();
         logger.info(`Latest Block Number: ${latestBlockNumber}`);
 
-        if (currentBlock >= latestBlockNumber) {
-        logger.info(`Current block number ${currentBlock} is >= latest block number ${latestBlockNumber}. Pausing for 10 seconds`);
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        if (currentBlock > latestBlockNumber) {
+        logger.info(`Current processing block ${currentBlock} is > latest confirmed block ${latestBlockNumber}. Pausing for 5 minutes`);
+        await new Promise(resolve => setTimeout(resolve, 300000));
         continue;
         }
 
@@ -113,7 +114,7 @@ async function processBlock(blockNumber: number) {
   try {
     const blockHash = await bitcoinClient.getBlockHash(blockNumber);
     const block = await bitcoinClient.getBlock(blockHash);
-    await processTransactionsInChunks(block,100); 
+    await processTransactionsInChunks(block,1000); 
   } catch (error) {
     logger.error(`Error processing block ${blockNumber}: ${error.message}`);
     throw error; // Optionally rethrow or handle the error as needed
@@ -128,7 +129,7 @@ async function processTransactionsInChunks(block: any, chunkSize: number) {
 
   for (let i = 0; i < totalTxs; i += chunkSize) {
       const chunk = txids.slice(i, i + chunkSize);
-      logger.info(`Processing transactions ${i + 1} to ${Math.min(i + chunkSize, totalTxs)}`);
+      logger.info(`Processing transactions ${i + 1} to ${Math.min(i + chunkSize, totalTxs)} of block ${block.height}`);
 
       await Promise.all(chunk.map(txid => limit(() => retryWithBackoff(() => processTransactionWithCache(block, txid), 3))));
   }
@@ -213,13 +214,14 @@ async function processTransaction(block : any, transaction: any) {
 
 async function extractDataFromRPCTransaction(tx: any, block: any, actualData: Buffer){
   const extractedData: ExtractedBitcoinData = {
+    EventType:'',
     TxHash: tx.txid,
     OpReturnData: actualData.toString('hex'), // Assuming this is the data from OP_RETURN
     SourceAmount: BigInt(0),
     DestChainId: '',
     DepositId: BigInt(0),
     PartnerId: BigInt(0),
-    Recipient: Buffer.alloc(0),
+    Recipient:'',
     BlockHeight: block.height,
     BlockTimestamp: block.time,
     SrcChainId: '',
@@ -240,7 +242,6 @@ async function extractDataFromRPCTransaction(tx: any, block: any, actualData: Bu
   // Use BigInt for large integer operations
   const blockHeightBigInt = BigInt(extractedData.BlockHeight);
   extractedData.DepositId = (blockHeightBigInt << BigInt(32)) | BigInt(txIndex);
- // extractedData.DepositId = (extractedData.BlockHeight << 32) || txIndex;
 
   const gasBurnt = await fetchTransactionFee(tx);
   extractedData.GasBurnt = gasBurnt;
@@ -371,8 +372,9 @@ async function processISendEvent(
     extractedData.PartnerId = partnerId;
     extractedData.Recipient = recipient;
     extractedData.Depositor = depositorAddress;
+    extractedData.EventType = "ISend"
   
-    prettyLogExtractedData("ISEND", extractedData);
+    prettyLogExtractedData(extractedData);
   
     try {
       await saveExtractedDataToDatabase(extractedData);
@@ -383,7 +385,7 @@ async function processISendEvent(
   
 }
 
-function decodeISendEventMemo(data: Buffer): [bigint, string, bigint, Buffer, Error | null] {
+function decodeISendEventMemo(data: Buffer): [bigint, string, bigint, string, Error | null] {
   try {
 
       let offset = 0;
@@ -406,11 +408,11 @@ function decodeISendEventMemo(data: Buffer): [bigint, string, bigint, Buffer, Er
 
       switch (nonEvmFlag) {
           case 0x01:
-              destChainId = "osmo-test-5";
+              destChainId = "osmosis-1";
               recipientSize = data.length - offset; // Remaining size
               break;
           case 0x02:
-              destChainId = "near-testnet";
+              destChainId = "near";
               recipientSize = data.length - offset; // Remaining size
               break;
           default:
@@ -424,10 +426,12 @@ function decodeISendEventMemo(data: Buffer): [bigint, string, bigint, Buffer, Er
       // Read recipientBytes
       recipientBytes = data.slice(offset, offset + recipientSize);
 
-      return [sourceAmount, destChainId, partnerId, recipientBytes, null];
+      const recipientBase64 = recipientBytes.toString('base64');
+
+      return [sourceAmount, destChainId, partnerId, recipientBase64, null];
   } catch (error) {
       console.error("Error decoding ISend event:", error);
-      return [BigInt(0), "", BigInt(0), Buffer.alloc(0), error];
+      return [BigInt(0), "", BigInt(0),'', error];
   }
 }
 
@@ -460,15 +464,14 @@ async function processIReceiveEvent(
     if (err) {
       throw new Error(`Error decoding IReceive event: ${err}`);
     }
-  
-    logger.info(`\nDecoded data from IReceive Event: ${amount} || ${srcChainID} || ${requestIdentifier}\n`);
-  
+    
     extractedData.DestAmount = amount;
     extractedData.SrcChainId = srcChainID;
     extractedData.RequestIdentifier = requestIdentifier;
     extractedData.Gateway = btcGatewayAddress;
+    extractedData.EventType = "IReceive"
   
-    prettyLogExtractedData("IRECEIVE", extractedData);
+    prettyLogExtractedData(extractedData);
   
     try {
       await saveExtractedDataToDatabase(extractedData);
@@ -542,11 +545,10 @@ async function processSetDappMetadataEvent(tx: any, extractedData: ExtractedBitc
   }
 
   const feePayerAddress = "0x" + feePayer.toString('hex');
-  logger.info(`Decoded data from SetDappMetadata Event: ${feePayerAddress}`);
-
   extractedData.FeePayerAddress = feePayerAddress;
+  extractedData.EventType = "SetDappMetadata"
 
-  prettyLogExtractedData("SET DAPP METADATA", extractedData);
+  prettyLogExtractedData(extractedData);
 
   try {
       await saveExtractedDataToDatabase(extractedData);
@@ -624,10 +626,10 @@ export async function startStreamerService() {
   }
 }
 
-function prettyLogExtractedData(eventType: string, extractedData: ExtractedBitcoinData) {
+function prettyLogExtractedData(extractedData: ExtractedBitcoinData) {
   
   const prettyData = {
-    "Event Type": eventType,
+    "Event Type": extractedData.EventType,
     "Block Height": extractedData.BlockHeight,
     "Block Timestamp": new Date(extractedData.BlockTimestamp * 1000).toISOString(),
     "Deposit ID": extractedData.DepositId.toString(),
@@ -639,7 +641,7 @@ function prettyLogExtractedData(eventType: string, extractedData: ExtractedBitco
     "Gateway Address": extractedData.Gateway,
     "OpReturn Data": extractedData.OpReturnData,
     "Partner ID": extractedData.PartnerId.toString(),
-    "Recipient": extractedData.Recipient.toString('hex'),
+    "Recipient": extractedData.Recipient,
     "Request Identifier": extractedData.RequestIdentifier.toString(),
     "Source Amount": extractedData.SourceAmount.toString(),
     "Source Chain ID": extractedData.SrcChainId,
@@ -648,6 +650,6 @@ function prettyLogExtractedData(eventType: string, extractedData: ExtractedBitco
   };
 
   // Use logger to log the formatted data
-  logger.info(`EXTRACTED DATA FROM ${eventType} EVENT:\n${JSON.stringify(prettyData, null, 2)}`);
+  logger.info(`EXTRACTED DATA FROM ${extractedData.EventType} EVENT:\n${JSON.stringify(prettyData, null, 2)}`);
   
 }
