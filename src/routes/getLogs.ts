@@ -35,8 +35,7 @@ fetchLogs.get('/fetch-logs', async (req: Request, res: Response) => {
         }
 
         const filter = {
-            contractAddress: reqContract,
-            blockNumber: { $gte: startBlock, $lte: endBlock }
+            BlockHeight: { $gte: startBlock, $lte: endBlock }
         };
 
         const result = await contractEventsCollection.find(filter).toArray();
