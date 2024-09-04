@@ -448,21 +448,30 @@ async function processIReceiveEvent(
     logger.info("\nExtracting IReceiveFlag Data\n");
   
     let totalSent = BigInt(0);
-  
+    let involvesGatewayAddress = false
+    
     // Iterate through the outputs to calculate the total amount sent
     for (const output of txData.vout) {
-      for (const address of output.scriptPubKey.addresses || []) {
-        if (address !== btcGatewayAddress) {
+        if (output.scriptPubKey.address == btcGatewayAddress) {
+          involvesGatewayAddress = true
+        } else if (extractedData.Recipient == ''){
+          extractedData.Recipient = output.scriptPubKey.address;
           totalSent += BigInt(Math.floor(output.value * 1e8)); // Value is in BTC, convert to Satoshis
-          break; // Assuming we break if one of the output addresses is not the btcGatewayAddress
         }
-      }
+    }
+
+    if (!involvesGatewayAddress) {
+      throw new Error(`IReceiveFlag transaction does not involve the gateway address as the sender`);  
     }
   
     // Decode the IReceive event memo
     const [amount, requestIdentifier, srcChainID, err] = await decodeIReceiveEventMemo(eventData);
     if (err) {
       throw new Error(`Error decoding IReceive event: ${err}`);
+    }
+
+    if (totalSent!=amount) {
+      throw new Error(`IReceiveFlag transaction does not match the amount sent to amount received from memo`);  
     }
     
     extractedData.DestAmount = amount;
@@ -472,7 +481,7 @@ async function processIReceiveEvent(
     extractedData.EventType = "IReceive"
   
     prettyLogExtractedData(extractedData);
-  
+
     try {
       await saveExtractedDataToDatabase(extractedData);
     } catch (err) {
