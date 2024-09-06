@@ -8,8 +8,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "paths": {
-      "@polkadot/api": ["./node_modules/@polkadot/api"]
-    }
   }
 }

@@ -15,7 +15,7 @@ const cache = new NodeCache({ stdTTL: 300, checkperiod: 320 }); // Cache TTL is 
 
 const limit = pLimit(20); // Limit to 5 concurrent requests
 
-const bitcoinClient = new Client({
+export const bitcoinClient = new Client({
   network: 'mainnet',
   username: process.env.BITCOIN_RPC_USER,
   password: process.env.BITCOIN_RPC_PASSWORD,

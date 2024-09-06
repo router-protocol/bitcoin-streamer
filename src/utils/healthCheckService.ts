@@ -1,22 +1,15 @@
-import { ApiPromise, WsProvider } from '@polkadot/api';
 import { getCollection } from "../db/mongoDB";
 import { getLastSyncedBlock } from "../db/mongoDB/action/chainState";
 import logger from "../logger";
 import sendAlertToSlack from "./sendAlertToSlack";
 import { getNetwork } from "../constant/index"
+import { bitcoinClient } from "../streamer";
 
 export const healthCheckService: () => Promise<boolean> = async () => {
     try {
-        // Connect to the Aleph Zero network
-
         const network = getNetwork(process.env.CHAIN_ID);
-
-        const api = await ApiPromise.create({ provider: new WsProvider(network.nodeWSUrl) });
-
         // Get the latest block height
-        const latestBlockHash = await api.rpc.chain.getFinalizedHead();
-        const latestBlock = await api.rpc.chain.getBlock(latestBlockHash);
-        const latestBlockHeight: number = latestBlock.block.header.number.toNumber();
+        const latestBlockHeight = await bitcoinClient.getBlockCount();
 
         // Sanity check for startBlock and endBlock
         //const chainstatescollection = await getCollection("chainstates");
@@ -24,7 +17,7 @@ export const healthCheckService: () => Promise<boolean> = async () => {
         const lastSyncedBlock = await getLastSyncedBlock(chainStateCollection as any);
 
         const difference = lastSyncedBlock - latestBlockHeight;
-        let message = `${network.name} Streamer is ${Math.abs(difference)} blocks ${difference < 0 ? "behind" : "ahead"} of Aleph Zero Network.`;
+        let message = `${network.name} Streamer is ${Math.abs(difference)} blocks ${difference < 0 ? "behind" : "ahead"} of Bitcoin Network.`;
         logger.info(message);
         message += ` Last synced block: ${lastSyncedBlock} Latest block: ${latestBlockHeight}`;
         logger.info(`Last synced block: ${lastSyncedBlock} Latest block: ${latestBlockHeight}`);
