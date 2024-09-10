@@ -15,14 +15,14 @@ export const bitcoinTestnet: Chain = {
 };
 
 export const bitcoinMainnet: Chain = {
-  id: "bitcoin-mainnet",
+  id: "bitcoin",
   name: "Bitcoin",
   startBlock: Number(process.env.START_BLOCK),
 };
 
 const idmp = {
   "bitcoin-testnet": bitcoinTestnet,
-  "bitcoin-mainnet": bitcoinMainnet
+  "bitcoin": bitcoinMainnet
 };
 
 export const getNetwork = (id: string) => idmp[id];
