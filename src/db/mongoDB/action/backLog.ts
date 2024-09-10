@@ -50,5 +50,34 @@ export async function getLogsFromBlockHeightToBlockHeight(collection: Collection
 }
 
 export async function createTTLIndex(collection: Collection<Document>): Promise<void> {
+    const indexName = "createdAt_1"; // Default MongoDB name for the index on createdAt field
+
+    // Ensure PRUNE_AFTER is a valid number
+    if (isNaN(PRUNE_AFTER)) {
+        throw new Error(`PRUNE_AFTER is NaN. Please define a valid numeric value for PRUNE_AFTER.`);
+    }
+
+    // Get existing indexes
+    const existingIndexes = await collection.indexes();
+
+    // Check if the index already exists
+    const existingIndex = existingIndexes.find(index => index.name === indexName);
+
+    // If the index exists, check its expireAfterSeconds option
+    if (existingIndex) {
+        // If the expireAfterSeconds option is different, drop the existing index
+        if (existingIndex.expireAfterSeconds !== PRUNE_AFTER) {
+            console.log(`Dropping existing index ${indexName} due to option mismatch.`);
+            await collection.dropIndex(indexName);
+        } else {
+            // The index already exists with the correct options, so return early
+            console.log(`Index ${indexName} already exists with the correct options. Skipping creation.`);
+            return;
+        }
+    }
+
+    // Create the index with the desired expireAfterSeconds value
+    console.log(`Creating index ${indexName} with expireAfterSeconds: ${PRUNE_AFTER}`);
     await collection.createIndex({ "createdAt": 1 }, { expireAfterSeconds: PRUNE_AFTER });
 }
+
