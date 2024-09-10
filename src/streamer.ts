@@ -15,13 +15,15 @@ const cache = new NodeCache({ stdTTL: 300, checkperiod: 320 }); // Cache TTL is 
 
 const limit = pLimit(20); // Limit to 5 concurrent requests
 
+const sslEnabled = process.env.BITCOIN_RPC_SSL === 'true';
+
 export const bitcoinClient = new Client({
   network: 'mainnet',
   username: process.env.BITCOIN_RPC_USER,
   password: process.env.BITCOIN_RPC_PASSWORD,
-  host: '34.44.80.7', 
-  port: 8332,
-  ssl: false,
+  host: process.env.BITCOIN_RPC_HOST, 
+  port: process.env.BITCOIN_RPC_PORT,
+  ssl: sslEnabled,
 });
 
 const ISendFlag = 0xED; 
@@ -114,7 +116,7 @@ async function processBlock(blockNumber: number) {
   try {
     const blockHash = await bitcoinClient.getBlockHash(blockNumber);
     const block = await bitcoinClient.getBlock(blockHash);
-    await processTransactionsInChunks(block,1000); 
+    await processTransactionsInChunks(block,Number(process.env.CHUNK_SIZE)); 
   } catch (error) {
     logger.error(`Error processing block ${blockNumber}: ${error.message}`);
     throw error; // Optionally rethrow or handle the error as needed
