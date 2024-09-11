@@ -622,7 +622,13 @@ async function determineStartBlock(chainStateCollection: Collection<Document> | 
 async function saveExtractedDataToDatabase(data: ExtractedBitcoinData): Promise<void> {
   const collection = await getCollection('contractEvents');
   if (!collection) throw new Error('Failed to retrieve contractEvents');
-  await collection.insertOne(data);
+
+  const documentWithTimestamp = {
+    ...data,
+    createdAt: new Date() 
+  };
+
+  await collection.insertOne(documentWithTimestamp);
 }
 
 
