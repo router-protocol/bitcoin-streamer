@@ -98,12 +98,7 @@ This guide walks you through the steps to set up a Bitcoin node with transaction
    txindex=1
 
    This setting will increase storage requirements and the initial sync time, but it’s essential if you need to query transactions not related to your wallet.
-
-   Optional: Enable Pruning (to Reduce Disk Usage)
-   NOTE : Pruning will be disabled if using txindex=1
   
-   If you don't need the full transaction history but still want to run a full node, you can enable pruning to save space by only keeping the most recent blocks. Add the following to your bitcoin.conf
-
 
 4. Start Syncing the Blockchain
    
@@ -115,7 +110,7 @@ This guide walks you through the steps to set up a Bitcoin node with transaction
    For your node to stay up-to-date with the Bitcoin network, it needs to be running continuously. Your node will download new blocks as they are added to the network.
 
    Example Configuration (bitcoin.conf)
-   Here’s an example configuration that enables transaction indexing and optional pruning:
+   Here’s an example configuration that enables transaction indexing :
 
    txindex=1
    maxconnections=40
