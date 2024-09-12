@@ -34,19 +34,19 @@ BITCOIN_RPC_HOST=
 BITCOIN_RPC_PORT=
 BITCOIN_RPC_SSL=
 ```
-`MONGO_DB_URI` is the URI of the MongoDB instance. We are running MongoDB locally, you have to use port defined in mongodb.   
-`EXPLORER_ENVIRONMENT` either will be mainnet, testnet or alpha-devnet.   
-`START_BLOCK` is block to be started from during intial start. omit this if you want to start from the 0th block or lastSyncedBlock in your db  
-`PORT` to be exposed.   
-`ALERTER_ACTIVE` and `SLACK_WEBHOOK_URL` is for slack health alerter.  
-`START_BLOCK` is the overide block to be started from. If this is set, all other condition will be ignored. 
-`PRUNE_AFTER` is the time in seconds after which the db data will be pruned.
-`CHUNK_SIZE` is the number of transactions you want to process in parallel. Adjust as per your needs. 1000 is optimal.
-`BITCOIN_RPC_USER` is the username to use to authenticate to the RPC server.
-`BITCOIN_RPC_PASSWORD`is the passphrase to use to authenticate to the RPC server.
-`BITCOIN_RPC_HOST` is the IP address of the RPC server you want to connect
-`BITCOIN_RPC_PORT` is the port of the RPC server you want to connect
-`BITCOIN_RPC_SSL` specifies whether transport layer security should be disabled.
+`MONGO_DB_URI` is the URI of the MongoDB instance. We are running MongoDB locally, you have to use port defined in mongodb.     
+`EXPLORER_ENVIRONMENT` either will be mainnet, testnet or alpha-devnet.     
+`START_BLOCK` is block to be started from during intial start. omit this if you want to start from the 0th block or lastSyncedBlock in your db    
+`PORT` to be exposed.     
+`ALERTER_ACTIVE` and `SLACK_WEBHOOK_URL` is for slack health alerter.    
+`START_BLOCK` is the overide block to be started from. If this is set, all other condition will be ignored.   
+`PRUNE_AFTER` is the time in seconds after which the db data will be pruned.  
+`CHUNK_SIZE` is the number of transactions you want to process in parallel. Adjust as per your needs. 1000 is optimal.  
+`BITCOIN_RPC_USER` is the username to use to authenticate to the RPC server.  
+`BITCOIN_RPC_PASSWORD`is the passphrase to use to authenticate to the RPC server.  
+`BITCOIN_RPC_HOST` is the IP address of the RPC server you want to connect  
+`BITCOIN_RPC_PORT` is the port of the RPC server you want to connect  
+`BITCOIN_RPC_SSL` specifies whether transport layer security should be disabled.  
 
 
 
