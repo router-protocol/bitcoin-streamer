@@ -19,7 +19,7 @@ Ensure that you have Docker, Node.js, and Yarn installed on your machine. If not
 Update the following environment variables from `.env.example` file:
 ```yaml
 
-MONGO_DB_URI=mongodb://mongodb:27016/bitcoin-streamer
+MONGO_DB_URI=mongodb://mongodb:27015/bitcoin-streamer
 CHAIN_ID=bitcoin
 EXPLORER_ENVIRONMENT=mainnet
 START_BLOCK=860725

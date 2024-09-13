@@ -46,7 +46,7 @@ if docker service create \
     --limit-cpu 2 \
     --restart-max-attempts 1 \
     --env-file "$ENV_PATH" \
-    -p 27016:27017 \
+    -p 27015:27017 \
     --mount type=bind,source="$DB_VOLUME_PATH",target=/data/db \
     $DB_IMAGE_NAME; then
     echo "$DB_SERVICE_NAME service created successfully."
