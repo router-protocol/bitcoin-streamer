@@ -57,22 +57,31 @@ export async function createTTLIndex(collection: Collection<Document>): Promise<
         throw new Error(`PRUNE_AFTER is NaN. Please define a valid numeric value for PRUNE_AFTER.`);
     }
 
-    // Get existing indexes
-    const existingIndexes = await collection.indexes();
+    try {
+        // Attempt to get existing indexes
+        const existingIndexes = await collection.indexes();
 
-    // Check if the index already exists
-    const existingIndex = existingIndexes.find(index => index.name === indexName);
+        // Check if the index already exists
+        const existingIndex = existingIndexes.find(index => index.name === indexName);
 
-    // If the index exists, check its expireAfterSeconds option
-    if (existingIndex) {
-        // If the expireAfterSeconds option is different, drop the existing index
-        if (existingIndex.expireAfterSeconds !== PRUNE_AFTER) {
-            console.log(`Dropping existing index ${indexName} due to option mismatch.`);
-            await collection.dropIndex(indexName);
+        // If the index exists, check its expireAfterSeconds option
+        if (existingIndex) {
+            // If the expireAfterSeconds option is different, drop the existing index
+            if (existingIndex.expireAfterSeconds !== PRUNE_AFTER) {
+                console.log(`Dropping existing index ${indexName} due to option mismatch.`);
+                await collection.dropIndex(indexName);
+            } else {
+                // The index already exists with the correct options, so return early
+                console.log(`Index ${indexName} already exists with the correct options. Skipping creation.`);
+                return;
+            }
+        }
+    } catch (error) {
+        if (error.codeName === 'NamespaceNotFound') {
+            console.log(`Collection does not exist. Creating collection by setting the TTL index.`);
         } else {
-            // The index already exists with the correct options, so return early
-            console.log(`Index ${indexName} already exists with the correct options. Skipping creation.`);
-            return;
+            // Throw any other unexpected errors
+            throw error;
         }
     }
 
