@@ -40,12 +40,12 @@ images:
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}"
 
 # Substitute variables
-substitutions:
-  _REGION: "asia-south1"
-  _REPOSITORY: "router-apps-asia-south"
-  _IMAGE: "bitcoin-streamer"
-  _KUBE_CLUSTER: "mainnet-tools"
-  _KUBE_DEPLOYMENT: "bitcoin-streamer"
-  _KUBE_NAMESPACE: "bitcoin-streamer"
-  _HELM_CHART: "./infra/helm"
-  _HELM_VALUES: "./infra/helm/values.mainnet.yaml"
+# substitutions:
+#   _REGION: "asia-south1"
+#   _REPOSITORY: "router-apps-asia-south"
+#   _IMAGE: "bitcoin-streamer"
+#   _KUBE_CLUSTER: "mainnet-tools"
+#   _KUBE_DEPLOYMENT: "bitcoin-streamer"
+#   _KUBE_NAMESPACE: "bitcoin-streamer"
+#   _HELM_CHART: "./infra/helm"
+#   _HELM_VALUES: "./infra/helm/values.mainnet.yaml"

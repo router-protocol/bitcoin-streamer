@@ -20,7 +20,7 @@ service:
 sslcert:
   enabled: true
   name: "bitcoin-streamer-tls"
-  host: "api.bitcoin-streamer.routerchain.network"
+  host: "api.streamer-orion.routerchain.network"
   annotations:
     "helm.sh/hook": "post-install,post-upgrade"
     "helm.sh/hook-weight": "20"
