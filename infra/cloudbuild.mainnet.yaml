@@ -30,11 +30,14 @@ steps:
         gcloud container clusters get-credentials ${_KUBE_CLUSTER} --region ${_REGION} --project ${PROJECT_ID}
         curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
         helm dependency update ${_HELM_CHART}
-        helm upgrade --install ${_KUBE_DEPLOYMENT} ${_HELM_CHART} \
-          --namespace ${_KUBE_NAMESPACE} \
-          --values ${_HELM_VALUES} \
-          --set image.tag=${SHORT_SHA} \
-          --reuse-values
+        for values_file in ${_HELM_VALUES_ARRAY[@]}; do
+          echo "Deploying ${values_file}..."
+          helm upgrade --install ${_KUBE_DEPLOYMENT} ${_HELM_CHART} \
+            --namespace ${_KUBE_NAMESPACE} \
+            --values $values_file \
+            --set image.tag=${SHORT_SHA} \
+            --reuse-values
+        done
 
 images:
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}"
@@ -48,4 +51,7 @@ images:
 #   _KUBE_DEPLOYMENT: "bitcoin-streamer"
 #   _KUBE_NAMESPACE: "bitcoin-streamer"
 #   _HELM_CHART: "./infra/helm"
-#   _HELM_VALUES: "./infra/helm/values.mainnet.orion.yaml"
+#   _HELM_VALUES_ARRAY:
+#     - "./infra/helm/values.mainnet.orion.yaml"
+#     - "./infra/helm/values.mainnet.lyra.yaml"
+#     - "./infra/helm/values.mainnet.dorado.yaml"

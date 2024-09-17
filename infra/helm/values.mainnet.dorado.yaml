@@ -1,6 +1,6 @@
 replicaCount: 1
 
-app: bitcoin-streamer-orion
+app: bitcoin-streamer-dorado
 env: mainnet
 
 image:
@@ -9,18 +9,18 @@ image:
   pullPolicy: IfNotPresent
 
 container:
-  secretName: btc-streamer-orion-env
+  secretName: btc-streamer-dorado-env
 
 service:
   type: NodePort
-  name: bitcoin-streamer-orion
+  name: bitcoin-streamer-dorado
   port: 8903
   targetPort: 8903
 
 sslcert:
   enabled: true
-  name: "bitcoin-streamer-orion-tls"
-  host: "api.btc-streamer-orion.routerchain.network"
+  name: "bitcoin-streamer-dorado-tls"
+  host: "api.btc-streamer-dorado.routerchain.network"
   annotations:
     "helm.sh/resource-policy": "keep"
 
