@@ -1,6 +1,6 @@
 replicaCount: 1
 
-app: bitcoin-streamer
+app: bitcoin-streamer-orion
 env: mainnet
 
 image:
@@ -9,21 +9,19 @@ image:
   pullPolicy: IfNotPresent
 
 container:
-  secretName: bitcoin-streamer-env
+  secretName: btc-streamer-orion
 
 service:
   type: NodePort
-  name: bitcoin-streamer
+  name: bitcoin-streamer-orion
   port: 8903
   targetPort: 8903
 
 sslcert:
   enabled: true
-  name: "bitcoin-streamer-tls"
+  name: "bitcoin-streamer-orion-tls"
   host: "api.streamer-orion.routerchain.network"
   annotations:
-    "helm.sh/hook": "post-install,post-upgrade"
-    "helm.sh/hook-weight": "20"
     "helm.sh/resource-policy": "keep"
 
 autoscaling:
@@ -41,7 +39,7 @@ ingress:
 
 backendConfig:
   healthCheck:
-    requestPath: /
+    requestPath: /health
     checkIntervalSec: 60
     timeoutSec: 100
     healthyThreshold: 1

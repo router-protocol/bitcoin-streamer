@@ -48,4 +48,4 @@ images:
 #   _KUBE_DEPLOYMENT: "bitcoin-streamer"
 #   _KUBE_NAMESPACE: "bitcoin-streamer"
 #   _HELM_CHART: "./infra/helm"
-#   _HELM_VALUES: "./infra/helm/values.mainnet.yaml"
+#   _HELM_VALUES: "./infra/helm/values.mainnet.orion.yaml"
