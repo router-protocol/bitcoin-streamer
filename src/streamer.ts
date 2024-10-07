@@ -340,7 +340,7 @@ async function processISendEvent(
   
       if (address === gatewayAddress) {
         // Add the value sent to the btcGatewayAddress across all relevant outputs
-        const receivedAmount = BigInt(Math.floor(output.value * 1e8)); // Value is in BTC, convert to Satoshis
+        const receivedAmount = BigInt((output.value * 1e8).toFixed(0)); // Value is in BTC, convert to Satoshis
         totalReceived += receivedAmount;
         logger.info(
           `Match found! Value added: ${receivedAmount} Satoshis. Total received so far: ${totalReceived} Satoshis`
@@ -458,7 +458,7 @@ async function processIReceiveEvent(
           involvesGatewayAddress = true
         } else if (extractedData.Recipient == ''){
           extractedData.Recipient = output.scriptPubKey.address;
-          totalSent += BigInt(Math.floor(output.value * 1e8)); // Value is in BTC, convert to Satoshis
+          totalSent += BigInt((output.value * 1e8).toFixed(0)); // Value is in BTC, convert to Satoshis
         }
     }
 
@@ -595,7 +595,7 @@ async function fetchTransactionFee(tx: any,): Promise<bigint> {
           throw new Error(`vout index out of range in previous transaction ${prevTxHash}`);
         }
   
-        totalInputValue += BigInt(Math.floor(prevTx.vout[vin.vout].value * 1e8)); // Convert BTC to Satoshi
+        totalInputValue += BigInt((prevTx.vout[vin.vout].value * 1e8).toFixed(0)); // Convert BTC to Satoshi
       } catch (error) {
         throw new Error(`Error fetching previous transaction ${vin.txid}: ${error.message}`);
       }
@@ -603,7 +603,7 @@ async function fetchTransactionFee(tx: any,): Promise<bigint> {
   
     // Calculate total output value
     for (const vout of tx.vout) {
-      totalOutputValue += BigInt(Math.floor(vout.value * 1e8)); // Convert BTC to Satoshi
+      totalOutputValue += BigInt((vout.value * 1e8).toFixed(0)); // Convert BTC to Satoshi
     }
   
     // The fee is the total input value minus the total output value
