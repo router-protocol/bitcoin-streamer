@@ -457,7 +457,11 @@ async function processIReceiveEvent(
         if (output.scriptPubKey.address == btcGatewayAddress) {
           involvesGatewayAddress = true
         } else if (extractedData.Recipient == ''){
-          extractedData.Recipient = output.scriptPubKey.address;
+          // Convert the address to a Buffer and then to Base64
+          const addressBuffer = Buffer.from(output.scriptPubKey.address, 'utf8');
+          const recipientBase64 = addressBuffer.toString('base64');
+          // Assign the Base64-encoded address to extractedData.Recipient
+          extractedData.Recipient = recipientBase64;
           totalSent += BigInt((output.value * 1e8).toFixed(0)); // Value is in BTC, convert to Satoshis
         }
     }
