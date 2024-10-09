@@ -47,8 +47,8 @@ backendConfig:
 
 resources:
   requests:
-    memory: "1024Mi"
-    cpu: "700m"
-  limits:
     memory: "2048Mi"
-    cpu: "950m"
+    cpu: "1"
+  limits:
+    memory: "6000Mi"
+    cpu: "2"
