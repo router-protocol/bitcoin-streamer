@@ -620,7 +620,7 @@ async function determineStartBlock(chainStateCollection: Collection<Document> | 
     const lastSyncedBlock = await getLastSyncedBlock(chainStateCollection as any);
     console.log("lastSyncedBlock : ", lastSyncedBlock);
     console.log("startBlockFromConfig : ", startBlockFromConfig);
-    return startBlockFromConfig !== undefined ? startBlockFromConfig : lastSyncedBlock;
+    return lastSyncedBlock !== undefined ? lastSyncedBlock : startBlockFromConfig;
 }
 
 async function saveExtractedDataToDatabase(data: ExtractedBitcoinData): Promise<void> {

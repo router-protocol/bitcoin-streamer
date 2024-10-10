@@ -36,10 +36,9 @@ BITCOIN_RPC_SSL=
 ```
 `MONGO_DB_URI` is the URI of the MongoDB instance. We are running MongoDB locally, you have to use port defined in mongodb.     
 `EXPLORER_ENVIRONMENT` either will be mainnet, testnet or alpha-devnet.     
-`START_BLOCK` is block to be started from during intial start. omit this if you want to start from the 0th block or lastSyncedBlock in your db    
+`START_BLOCK` is block is to be given to start from the desired block during intial start. omit this if you want to start from the 0th block.
 `PORT` to be exposed.     
 `ALERTER_ACTIVE` and `SLACK_WEBHOOK_URL` is for slack health alerter.    
-`START_BLOCK` is the overide block to be started from. If this is set, all other condition will be ignored.   
 `PRUNE_AFTER` is the time in seconds after which the db data will be pruned.  
 `CHUNK_SIZE` is the number of transactions you want to process in parallel. Adjust as per your needs. 1000 is optimal.  
 `BITCOIN_RPC_USER` is the username to use to authenticate to the RPC server.  
@@ -61,9 +60,10 @@ BITCOIN_RPC_SSL=
 3. **Health Check for service**
 `curl http://localhost:8903/health`
 
-#### When restarting streamer, if .env file has START_BLOCK provided, streamer will start from the given START_BLOCK again.
-#### If you wish to run from the lastSyncedBlock from the db, remove the START_BLOCK from .env and Run Docker Swarm Script
+#### When restarting streamer, the streamer will start from the lastSyncedBlock from the db.
+#### If you wish to run from a particular block, you can edit the lastSyncedBlock in the chainStates collection from your db and Run Docker Swarm Script again.
 
+#### Do not delete chainState collection in order to avoid losing the lastSyncedBlock number. If lost you can add block number from which you want to start in START_BLOCK in env.
 
 # Setting Up a Bitcoin Node with Transaction Indexing
 
