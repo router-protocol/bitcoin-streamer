@@ -39,7 +39,6 @@ fetchLogs.get('/fetch-logs', async (req: Request, res: Response) => {
         };
 
         const result = await contractEventsCollection.find(filter).toArray();
-        console.log(result)
         res.json(keysToSnakeCase(result as any));
     } catch (error) {
         logger.error(`Error fetching data: ${error}`);

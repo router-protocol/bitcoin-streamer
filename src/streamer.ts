@@ -627,11 +627,24 @@ async function saveExtractedDataToDatabase(data: ExtractedBitcoinData): Promise<
   const collection = await getCollection('contractEvents');
   if (!collection) throw new Error('Failed to retrieve contractEvents');
 
+  // Define the unique field or combination of fields that identify the event
+  const query = { TxHash: data.TxHash, DepositId: data.DepositId }; 
+
+  // Check if the event already exists in the database
+  const existingEvent = await collection.findOne(query);
+
+  if (existingEvent) {
+    console.log('Event already exists in the database, skipping insertion.');
+    return; // Exit the function, event already exists
+  }
+
+  // Add a createdAt timestamp to the document
   const documentWithTimestamp = {
     ...data,
     createdAt: new Date() 
   };
 
+  // Insert the new event
   await collection.insertOne(documentWithTimestamp);
 }
 
