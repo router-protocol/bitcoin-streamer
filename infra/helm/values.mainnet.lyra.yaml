@@ -39,7 +39,7 @@ ingress:
 
 backendConfig:
   healthCheck:
-    requestPath: /health
+    requestPath: /
     checkIntervalSec: 60
     timeoutSec: 100
     healthyThreshold: 1
