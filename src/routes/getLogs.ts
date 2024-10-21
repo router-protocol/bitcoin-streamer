@@ -3,7 +3,8 @@ import logger from '../logger';
 import { getCollection } from '../db/mongoDB';
 import { keysToSnakeCase } from '../utils/caseConverter';
 
-const fetchLogs = Router();
+const fetchLogs  = Router();
+const fetchMemo = Router();
 
 fetchLogs.get('/fetch-logs', async (req: Request, res: Response) => {
     const reqStartBlock = Number(req.query.startBlock);
@@ -41,9 +42,32 @@ fetchLogs.get('/fetch-logs', async (req: Request, res: Response) => {
         const result = await contractEventsCollection.find(filter).toArray();
         res.json(keysToSnakeCase(result as any));
     } catch (error) {
-        logger.error(`Error fetching data: ${error}`);
+        logger.error(`Error fetching logs data: ${error}`);
         res.status(500).json({ success: false, message: 'Internal Server Error' });
     }
 });
 
-export { fetchLogs };
+fetchMemo.get('/fetch-memo', async (req: Request, res: Response) => {
+    const memo = (req.query.memo);
+
+    try {
+        const contractEventsCollection = await getCollection('contractEvents');
+        if (!contractEventsCollection) {
+            logger.error('Collection contractEvents not found');
+            res.status(500).json({ success: false, message: 'Collection not found' });
+            return;
+        }
+
+        // Define the unique field or combination of fields that identify the event
+        const query = { OpReturnData : memo };
+
+        const result = await contractEventsCollection.find(query).toArray();
+        res.json(keysToSnakeCase(result as any));
+
+    } catch (error) {
+        logger.error(`Error fetching memo data: ${error}`);
+        res.status(500).json({ success: false, message: 'Internal Server Error' });
+    }
+});
+
+export { fetchLogs, fetchMemo };

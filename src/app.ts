@@ -5,7 +5,7 @@ import logger from './logger';
 import { startStreamerService } from './streamer';
 import { initializeMongoDB, DBInstance } from './db/mongoDB';  // Ensure DBInstance is exported
 import { healthCheck } from './routes/healthCheck';
-import { fetchLogs } from './routes/getLogs';
+import { fetchLogs,fetchMemo } from './routes/getLogs';
 import { healthCheckService } from './utils/healthCheckService';
 import { ALERTER_ACTIVE } from './constant';
 require("dotenv").config({ path: path.resolve(__dirname, '../.env') });
@@ -21,6 +21,7 @@ app.get('/', (req: Request, res: Response) => {
 
 app.use('/', healthCheck);
 app.use('/', fetchLogs); // Fetch logs route
+app.use('/', fetchMemo);
 
 async function main() {
     try {
