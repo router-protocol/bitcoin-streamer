@@ -61,6 +61,7 @@ interface ExtractedBitcoinData {
     DestAmount: bigint;
     GasBurnt: bigint;
     FeePayerAddress: string;
+    SwapDataHash: string;
 }
 
 let gatewayAddress : string;
@@ -233,6 +234,7 @@ async function extractDataFromRPCTransaction(tx: any, block: any, actualData: Bu
     DestAmount: BigInt(0),
     GasBurnt: BigInt(0),
     FeePayerAddress: '',
+    SwapDataHash:'',
   };
 
   logger.info(`Extracting Data from transaction with hash: ${tx.txid}`);
@@ -358,22 +360,9 @@ async function processISendEvent(
       logger.info(`Total amount received by gateway address ${gatewayAddress} in transaction ${tx.txid}: ${totalReceived} Satoshis`);
     }
   
-    // Decode the event memo
-    const [sourceAmount, destChainId, partnerId, recipient, err] = await decodeISendEventMemo(eventData);
-    if (err) {
-        throw new Error(`Error decoding ISend event: ${err}`);
-    }
-  
-    if (totalReceived >= BigInt(sourceAmount)) {
-      extractedData.SourceAmount = totalReceived;
-    } else {
-      throw new Error(`Amount received to gateway ${totalReceived} is less than sent in MEMO ${sourceAmount}`);
-    }
-  
-    extractedData.DestChainId = destChainId;
-    extractedData.PartnerId = partnerId;
-    extractedData.Recipient = recipient;
+    extractedData.SourceAmount = totalReceived;  /// (totalReceived >= BigInt(sourceAmount)) this check should be in middleware
     extractedData.Depositor = depositorAddress;
+    extractedData.SwapDataHash = eventData.toString('hex')
     extractedData.EventType = "ISend"
   
     prettyLogExtractedData(extractedData);
