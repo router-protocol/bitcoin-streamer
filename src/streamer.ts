@@ -41,6 +41,10 @@ const	srcChainIDSize = 32
 const	recipientSizeEVM = 20 
 const	evmDestChainIdSize  = 32
 
+// Map string flags to their corresponding hexadecimal values
+const flagMap = {
+  ed: ISendFlag,
+};
 
 
 interface ExtractedBitcoinData {
@@ -181,45 +185,58 @@ async function retryWithBackoff(fn: () => Promise<any>, retries: number) {
 }
 
 async function processTransaction(block : any, transaction: any) {
-    
-    let actualData: Buffer | undefined;
-    
-    try {
-        // Iterate over the Vout to find OP_RETURN and decode the memo
-        for (const vout of transaction.vout) {
-            if (vout.scriptPubKey.type === "nulldata" && vout.scriptPubKey.hex) {
-                const encodedData = Buffer.from(vout.scriptPubKey.hex, 'hex');
+  
+  let actualData: Buffer | undefined;
 
-                if (encodedData.length === 0) continue;
+  try {
+      // Iterate over the Vout to find OP_RETURN and decode the memo
+    for (const vout of transaction.vout) {
 
-                // Skip the first byte(s) that represent the OP_RETURN and length
-                actualData = encodedData.subarray(1); // Omits the first byte
-                if (encodedData.length > 1 && encodedData[0] === 0x6a) {
-                    actualData = encodedData.subarray(2); // Omits the length byte as well
-                }
+      if (vout.scriptPubKey.type === "nulldata" && vout.scriptPubKey.hex) {
 
-                if (actualData.length === 0) continue;
+        const encodedData = Buffer.from(vout.scriptPubKey.hex, 'hex');
 
-                const flag = actualData[0];
-
-                if (flag === ISendFlag || flag === IReceiveFlag || flag === SetDappMetadataFlag) {
-                    
-                    logger.info(`Found a valid flag: ${flag}`);
-                    await extractDataFromRPCTransaction(transaction,block,actualData);
-                }
-            }
+        if (encodedData.length === 0) {
+          logger.info("Encoded data is empty, skipping...");
+          continue;
         }
 
-    } catch (error) {
-        logger.error(`Error processing transaction ${transaction.txid}: ${error.message}`);
+        if (encodedData.length > 1 && encodedData[0] === 0x6a) {
+          actualData = encodedData.subarray(2); // Skip the OP_RETURN header
+        }
+
+        if (actualData.length === 0) {
+          continue;
+        }
+
+        const flag = actualData[0];
+
+        if (flag === ISendFlag || flag === IReceiveFlag || flag === SetDappMetadataFlag) {
+            
+          logger.info(`Found a valid flag: ${flag}. Processing transaction...`);
+          
+          await extractDataFromRPCTransaction(transaction,block,flag,actualData.subarray(1));
+
+        } else if (flagMap[(actualData.toString('utf8')).slice(0, 2).toLowerCase()] === ISendFlag) {
+
+          logger.info(`Found a valid ISend flag: ${ISendFlag}. Processing transaction...`);
+        
+          await extractDataFromRPCTransaction(transaction,block,ISendFlag,actualData.toString('utf8').slice(2));
+          
+        } 
+      } 
     }
+  } catch (error) {
+      logger.error(`Error processing transaction ${transaction.txid}: ${error.message}`);
+  }
 }
 
-async function extractDataFromRPCTransaction(tx: any, block: any, actualData: Buffer){
+async function extractDataFromRPCTransaction(tx: any, block: any, flag: string | number, eventData: Buffer | string){
+
   const extractedData: ExtractedBitcoinData = {
     EventType:'',
     TxHash: tx.txid,
-    OpReturnData: actualData.toString('hex'), // Assuming this is the data from OP_RETURN
+    OpReturnData: '',
     SourceAmount: BigInt(0),
     DestChainId: '',
     DepositId: BigInt(0),
@@ -238,6 +255,11 @@ async function extractDataFromRPCTransaction(tx: any, block: any, actualData: Bu
   };
 
   logger.info(`Extracting Data from transaction with hash: ${tx.txid}`);
+
+  extractedData.OpReturnData = 
+  typeof eventData === 'string' 
+    ? `ed${eventData}` 
+    : `${flag === IReceiveFlag ? 'ea' : flag === ISendFlag ? 'ed' : 'da'}${eventData.toString('hex')}`;
 
   // Get the transaction index in the block
   const txIndex = block.tx.findIndex((txID: string) => txID === tx.txid);
@@ -276,12 +298,9 @@ async function extractDataFromRPCTransaction(tx: any, block: any, actualData: Bu
 
   extractedData.Depositor = depositorAddress;
 
-  if (actualData.length === 0) {
+  if (eventData.length === 0) {
     throw new Error(`No MEMO found in transaction: ${extractedData.TxHash}`);
   }
-
-  const flag = actualData[0];
-  const eventData = actualData.subarray(1);
 
   switch (flag) {
     case ISendFlag:
@@ -291,12 +310,12 @@ async function extractDataFromRPCTransaction(tx: any, block: any, actualData: Bu
       
     case IReceiveFlag:
       
-      await processIReceiveEvent(tx, extractedData, eventData, gatewayAddress);
+      await processIReceiveEvent(tx, extractedData, eventData as Buffer, gatewayAddress);
       break
 
     case SetDappMetadataFlag:
         
-      await processSetDappMetadataEvent(tx, extractedData, eventData, depositorAddress);
+      await processSetDappMetadataEvent(tx, extractedData, eventData as Buffer, depositorAddress);
       break
 
     default:
@@ -310,7 +329,7 @@ async function extractDataFromRPCTransaction(tx: any, block: any, actualData: Bu
 async function processISendEvent(
     tx: any,
     extractedData: ExtractedBitcoinData,
-    eventData: Buffer,
+    eventData: string | Buffer,
     depositorAddress: string,
     gatewayAddress: string
   ) {
@@ -362,7 +381,7 @@ async function processISendEvent(
   
     extractedData.SourceAmount = totalReceived;  /// (totalReceived >= BigInt(sourceAmount)) this check should be in middleware
     extractedData.Depositor = depositorAddress;
-    extractedData.SwapDataHash = eventData.toString('hex')
+    extractedData.SwapDataHash =  typeof eventData === 'string' ? eventData : eventData.toString('hex'),
     extractedData.EventType = "ISend"
   
     prettyLogExtractedData(extractedData);
