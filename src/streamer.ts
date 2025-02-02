@@ -76,19 +76,18 @@ export async function initialize() {
     logger.info(`Streamer Service Running on : ${network.name}`);
 
     const chainStateCollection = await getCollection('chainState');
-    const EXPLORER_ENVIRONMENT: string = process.env.EXPLORER_ENVIRONMENT;
-    const endpoint = getEndpointsForNetwork(getNetworkType(EXPLORER_ENVIRONMENT.toLowerCase())).grpcEndpoint;
+    //const EXPLORER_ENVIRONMENT: string = process.env.EXPLORER_ENVIRONMENT;
+    //const endpoint = getEndpointsForNetwork(getNetworkType(EXPLORER_ENVIRONMENT.toLowerCase())).grpcEndpoint;
 
-    logger.info('Creating multi-client instance', endpoint);
-    const multiClientClient = new ChainGrpcMultiChainApi(endpoint);
-    const contractConfigs = await multiClientClient.fetchAllContractConfig();
-
+    //logger.info('Creating multi-client instance', endpoint);
+    //const multiClientClient = new ChainGrpcMultiChainApi(endpoint);
+    //const contractConfigs = await multiClientClient.fetchAllContractConfig();
     logger.info('Fetching gateway configuration');
-    const gatewayConfig = contractConfigs.contractconfigList.find(e => e.chainid == network.id && e.contracttype == 0 && e.contractEnabled);
-    if (!gatewayConfig) throw new Error('Gateway contract configuration not fetched from chain.');
+    // const gatewayConfig = contractConfigs.contractconfigList.find(e => e.chainid == network.id && e.contracttype == 0 && e.contractEnabled);
+    // if (!gatewayConfig) throw new Error('Gateway contract configuration not fetched from chain.');
 
-    gatewayAddress = gatewayConfig.contractaddress
-
+    //gatewayAddress = gatewayConfig.contractaddress
+    gatewayAddress = "bc1qqwxne5w7hzmz2zxqdxlwxrdgk3f7ew0945sm0a"
     let currentBlock = await determineStartBlock(chainStateCollection, network.startBlock ? network.startBlock : undefined);
     
     while (true) {
